@@ -2,12 +2,12 @@ CREATE TABLE `Login` (
     `LOGIN_ID` INT PRIMARY KEY , 
     `LOGIN_MAILiD` VARCHAR(50) NOT NULL,
     `LOGIN_USERNAME` VARCHAR(50) NOT NULL ,
-    `USER_PASSWORD` VARCHAR(50) PRIMARY KEY
+    `USER_PASSWORD` VARCHAR(50) NOT NULL
 );
 CREATE TABLE `User` (
     `USER_ID` INT PRIMARY KEY , 
     `USER_NAME` VARCHAR(50) NOT NULL ,
-    `USER_MOBILE` INT NOT NULL ,
+    `USER_MOBILE` VARCHAR(20) NOT NULL ,
     `USER_EMAIL` VARCHAR(50) NOT NULL,
     `USER_ADDRESS` VARCHAR(100) NOT NULL
 );
@@ -18,16 +18,16 @@ CREATE TABLE `Roles` (
 );
 CREATE TABLE `Permission` (
     `PER_ID` INT PRIMARY KEY ,
-    `PER_ROLE_ID` VARCHAR(50) PRIMARY KEY , 
+    `PER_ROLE_ID` INT UNIQUE , 
     `PER_MODULE` VARCHAR(50) NOT NULL , 
     `PER_NAME` VARCHAR(50) NOT NULL
 );
-CREATE TABLE `Bus` (
-    `BUS_NAME` VARCHAR(50) NOT NULL,
-    `BUS_ID` INT PRIMARY KEY ,
-    `BUS_NUM` INT NOT NULL ,
-    `BUS_TICKET` VARCHAR(50) NOT NULL ,
-    `BUS_TYPE` VARCHAR(50) NOT NULL
+CREATE TABLE Bus (
+    BUS_NAME VARCHAR(50) NOT NULL,
+    BUS_ID INT PRIMARY KEY,
+    BUS_NUM INT NOT NULL,
+    BUS_TICKET VARCHAR(50) NOT NULL,
+    BUS_TYPE VARCHAR(50) NOT NULL
 );
 CREATE TABLE `Station` (
     `STN_DESC` VARCHAR(50) NOT NULL ,
@@ -36,12 +36,12 @@ CREATE TABLE `Station` (
     `STN_DES` VARCHAR(50) NOT NULL , 
     `STN_ID` INT PRIMARY KEY
 );
-CREATE TABLE `Fare` (
-    `FARE_TITLE` VARCHAR(50) NOT NULL ,
-    `FARE_TKT_ID` INT PRIMARY KEY,
-    `FARE_ID` INT PRIMARY KEY ,
-    `FARE_DESC` VARCHAR(50) NOT NULL ,
-    `FARE_TYPE` VARCHAR(50) NOT NULL
+CREATE TABLE Fare (
+    FARE_TITLE VARCHAR(50) NOT NULL,
+    FARE_TKT_ID INT NOT NULL,
+    FARE_ID INT PRIMARY KEY,
+    FARE_DESC VARCHAR(50) NOT NULL,
+    FARE_TYPE VARCHAR(50) NOT NULL
 );
 CREATE TABLE `Time_Table` (
     `TMTA_ID` INT PRIMARY KEY,
@@ -79,12 +79,13 @@ INSERT INTO `Permission` (`PER_ID`, `PER_ROLE_ID`, `PER_MODULE`, `PER_NAME`) VAL
 (4, '4', 'Ticket Booking', 'Book Tickets'),
 (5, '5', 'Inspection', 'Inspect Buses');
 
-INSERT INTO `Bus` (`BUS_NAME`, `BUS_ID`, `BUS_NUM`, `BUS_TICKET`, `BUS_TYPE`) VALUES
-('City Express', 1, 101, '50 INR', 'AC'),
-('Metro Rider', 2, 102, '40 INR', 'Non-AC'),
-('Fast Track', 3, 103, '60 INR', 'Luxury'),
-('Night Service', 4, 104, '30 INR', 'Sleeper'),
-('Green Line', 5, 105, '55 INR', 'Electric');
+INSERT INTO Bus (BUS_NAME, BUS_ID, BUS_NUM, BUS_TICKET, BUS_TYPE) VALUES
+('City Express', 1, 201, 'Online', 'AC'),
+('Metro Shuttle', 2, 202, 'Counter', 'Non-AC'),
+('Night Rider', 3, 203, 'Online', 'Sleeper'),
+('Weekend Explorer', 4, 204, 'Counter', 'Luxury'),
+('Student Special', 5, 205, 'Online', 'Mini');
+
 
 INSERT INTO `Station` (`STN_DESC`, `STN_TYPE`, `STN_NAME`, `STN_DES`, `STN_ID`) VALUES
 ('Central Hub', 'Main', 'Station A', 'Main Bus Stop', 1),
@@ -93,12 +94,13 @@ INSERT INTO `Station` (`STN_DESC`, `STN_TYPE`, `STN_NAME`, `STN_DES`, `STN_ID`) 
 ('Industrial Zone', 'Depot', 'Station D', 'Factory Area', 4),
 ('Airport Link', 'Express', 'Station E', 'Airport Terminal', 5);
 
-INSERT INTO `Fare` (`FARE_TITLE`, `FARE_TKT_ID`, `FARE_ID`, `FARE_DESC`, `FARE_TYPE`) VALUES
-('Standard', 1, 101, 'Regular Fare', 'Fixed'),
-('Student Discount', 2, 102, '50% Off', 'Discounted'),
-('Senior Citizen', 3, 103, '30% Off', 'Discounted'),
-('Weekend Pass', 4, 104, 'Unlimited Rides', 'Pass'),
-('VIP Ticket', 5, 105, 'Premium Service', 'Luxury');
+INSERT INTO Fare (FARE_TITLE, FARE_TKT_ID, FARE_ID, FARE_DESC, FARE_TYPE) VALUES
+('Standard Fare', 101, 1, 'Regular fare', 'Economy'),
+('Express Fare', 102, 2, 'Fast route', 'Business'),
+('Night Fare', 103, 3, 'Late night service', 'Premium'),
+('Weekend Fare', 104, 4, 'Higher weekend rates', 'Luxury'),
+('Student Fare', 105, 5, 'Discount for students', 'Economy');
+
 
 INSERT INTO `Time_Table` (`TMTA_ID`, `TMTA_TYPE`, `TMTA_DESC`) VALUES
 (1, 'Weekday', '6 AM - 10 PM Service'),
