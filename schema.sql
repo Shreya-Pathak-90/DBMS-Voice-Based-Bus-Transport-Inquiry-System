@@ -186,3 +186,496 @@ ALTER TABLE `Fare` ADD CONSTRAINT `chk_fare_type` CHECK (`FARE_TYPE` IN ('Fixed'
 
 ALTER TABLE `Time_Table` ADD CONSTRAINT `chk_tmta_type` CHECK (`TMTA_TYPE` IN ('Weekday', 'Weekend', 'Night Shift', 'Express', 'Holiday Special'));
 
+
+
+
+
+-- TRIGGER: Automatically update login status when user is deleted
+DELIMITER $$
+CREATE TRIGGER after_user_delete
+AFTER DELETE ON `User`
+FOR EACH ROW
+BEGIN
+    UPDATE `Login` SET `LOGIN_STATUS` = 'Inactive' WHERE `LOGIN_ID` = OLD.USER_ID;
+END$$
+DELIMITER ;
+
+-- TRIGGER: Prevent deleting a role if assigned to a user
+DELIMITER $$
+CREATE TRIGGER before_role_delete
+BEFORE DELETE ON `Roles`
+FOR EACH ROW
+BEGIN
+    IF (SELECT COUNT(*) FROM `Permission` WHERE `PER_ROLE_ID` = OLD.ROLE_ID) > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot delete role, it is assigned to permissions';
+    END IF;
+END$$
+DELIMITER ;
+
+-- CURSOR: Fetch all bus names of AC type
+DELIMITER $$
+CREATE PROCEDURE get_ac_buses()
+BEGIN
+    DECLARE done INT DEFAULT 0;
+    DECLARE bus_name VARCHAR(50);
+    DECLARE cur CURSOR FOR SELECT `BUS_NAME` FROM `Bus` WHERE `BUS_TYPE` = 'AC';
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+    
+    OPEN cur;
+    read_loop: LOOP
+        FETCH cur INTO bus_name;
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+        SELECT bus_name;
+    END LOOP;
+    CLOSE cur;
+END$$
+DELIMITER ;
+
+-- STORED PROCEDURE: Add a new bus
+DELIMITER $$
+CREATE PROCEDURE add_bus(
+    IN p_bus_name VARCHAR(50), 
+    IN p_bus_id INT, 
+    IN p_bus_reg_number VARCHAR(20), 
+    IN p_bus_ticket VARCHAR(50), 
+    IN p_bus_type VARCHAR(50)
+)
+BEGIN
+    INSERT INTO `Bus` (`BUS_NAME`, `BUS_ID`, `BUS_REG_NUMBER`, `BUS_TICKET`, `BUS_TYPE`)
+    VALUES (p_bus_name, p_bus_id, p_bus_reg_number, p_bus_ticket, p_bus_type);
+END$$
+DELIMITER ;
+
+-- STORED FUNCTION: Calculate fare with discount
+DELIMITER $$
+CREATE FUNCTION calculate_discounted_fare(fare_amount DECIMAL(10,2), discount_percentage INT)
+RETURNS DECIMAL(10,2)
+DETERMINISTIC
+BEGIN
+    RETURN fare_amount - (fare_amount * discount_percentage / 100);
+END$$
+DELIMITER ;
+
+-- TRIGGER: Prevent fare from being updated to a non-existent timetable
+DELIMITER $$
+CREATE TRIGGER before_fare_update
+BEFORE UPDATE ON `Fare`
+FOR EACH ROW
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM `Time_Table` WHERE `TMTA_ID` = NEW.FARE_TKT_ID) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Invalid timetable reference';
+    END IF;
+END$$
+DELIMITER ;
+
+-- Ensure compatibility with MySQL Workbench
+SET GLOBAL log_bin_trust_function_creators = 1;
+
+-- 1. JOIN Query: Fetch Users with Their Login Details
+SELECT u.USER_ID, u.USER_NAME, u.USER_EMAIL, l.LOGIN_USERNAME, l.LOGIN_STATUS
+FROM `User` u
+JOIN `Login` l ON u.USER_ID = l.LOGIN_ID;
+
+-- 2. Subquery with SET Operations: Get Users Without Login Details
+SELECT USER_ID, USER_NAME, USER_EMAIL
+FROM `User`
+WHERE USER_ID NOT IN (SELECT LOGIN_ID FROM `Login`);
+
+-- 3. View: Active Users with Their Roles
+CREATE VIEW ActiveUsers AS
+SELECT u.USER_ID, u.USER_NAME, u.USER_EMAIL, r.ROLE_NAME, l.LOGIN_STATUS
+FROM `User` u
+JOIN `Login` l ON u.USER_ID = l.LOGIN_ID
+JOIN `Roles` r ON r.ROLE_ID IN (SELECT PER_ROLE_ID FROM `Permission`)
+WHERE l.LOGIN_STATUS = 'Active';
+
+-- 4. Complex Join: Fetch Bus Details with Fare & Time Table
+SELECT b.BUS_NAME, b.BUS_REG_NUMBER, f.FARE_TITLE, f.FARE_DESC, tt.TMTA_DESC
+FROM `Bus` b
+JOIN `Fare` f ON b.BUS_ID = f.FARE_ID
+JOIN `Time_Table` tt ON f.FARE_TKT_ID = tt.TMTA_ID;
+
+-- 5. Stored Procedure: Fetch Users by Role
+DELIMITER $$
+CREATE PROCEDURE GetUsersByRole(IN role_name VARCHAR(50))
+BEGIN
+    SELECT u.USER_ID, u.USER_NAME, u.USER_EMAIL, r.ROLE_NAME
+    FROM `User` u
+    JOIN `Roles` r ON r.ROLE_ID IN (SELECT PER_ROLE_ID FROM `Permission`)
+    WHERE r.ROLE_NAME = role_name;
+END$$
+DELIMITER ;
+
+-- 6. Cursor: Fetch Bus Names and Ticket Prices
+DELIMITER $$  
+CREATE PROCEDURE FetchBusTickets()  
+BEGIN  
+    DECLARE done INT DEFAULT 0;  
+    DECLARE bus_name VARCHAR(50);  
+    DECLARE bus_ticket VARCHAR(50);  
+    DECLARE cur CURSOR FOR SELECT BUS_NAME, BUS_TICKET FROM `Bus`;  
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;  
+
+    OPEN cur;  
+    read_loop: LOOP  
+        FETCH cur INTO bus_name, bus_ticket;  
+        IF done THEN  
+            LEAVE read_loop;  
+        END IF;  
+        SELECT bus_name, bus_ticket;  
+    END LOOP;  
+    CLOSE cur;  
+END$$  
+DELIMITER ;  
+
+-- 7. Trigger: Prevent Duplicate Bus Registration Numbers
+DELIMITER $$
+CREATE TRIGGER prevent_duplicate_bus_reg
+BEFORE INSERT ON `Bus`
+FOR EACH ROW
+BEGIN
+    IF EXISTS (SELECT 1 FROM `Bus` WHERE BUS_REG_NUMBER = NEW.BUS_REG_NUMBER) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Duplicate bus registration number not allowed';
+    END IF;
+END$$
+DELIMITER ;
+
+-- 8. Function: Calculate Discounted Fare
+DELIMITER $$
+CREATE FUNCTION calculate_discounted_fare(fare_amount DECIMAL(10,2), discount_percentage INT)
+RETURNS DECIMAL(10,2)
+DETERMINISTIC
+BEGIN
+    RETURN fare_amount - (fare_amount * discount_percentage / 100);
+END$$
+DELIMITER ;
+
+-- 9. Trigger: Prevent Fare from Being Updated to Non-Existent Timetable
+DELIMITER $$  
+CREATE TRIGGER before_fare_update  
+BEFORE UPDATE ON `Fare`  
+FOR EACH ROW  
+BEGIN  
+    IF NOT EXISTS (SELECT 1 FROM `Time_Table` WHERE `TMTA_ID` = NEW.FARE_TKT_ID) THEN  
+        SIGNAL SQLSTATE '45000'  
+        SET MESSAGE_TEXT = 'Invalid timetable reference';  
+    END IF;  
+END$$  
+DELIMITER ;
+
+-- 10. Ensure Compatibility with MySQL Workbench
+SET GLOBAL log_bin_trust_function_creators = 1;
+
+
+
+
+
+
+
+-- Triggers
+DELIMITER $$
+CREATE TRIGGER after_user_delete
+AFTER DELETE ON `User`
+FOR EACH ROW
+BEGIN
+    UPDATE `Login` SET `LOGIN_STATUS` = 'Inactive' WHERE `LOGIN_ID` = OLD.USER_ID;
+END$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE TRIGGER before_role_delete
+BEFORE DELETE ON `Roles`
+FOR EACH ROW
+BEGIN
+    IF (SELECT COUNT(*) FROM `Permission` WHERE `PER_ROLE_ID` = OLD.ROLE_ID) > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Cannot delete role, it is assigned to permissions';
+    END IF;
+END$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE TRIGGER prevent_duplicate_bus_reg
+BEFORE INSERT ON `Bus`
+FOR EACH ROW
+BEGIN
+    IF EXISTS (SELECT 1 FROM `Bus` WHERE BUS_REG_NUMBER = NEW.BUS_REG_NUMBER) THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Duplicate bus registration number not allowed';
+    END IF;
+END$$
+DELIMITER ;
+
+-- Cursors and Stored Procedures
+DELIMITER $$
+CREATE PROCEDURE get_ac_buses()
+BEGIN
+    DECLARE done INT DEFAULT 0;
+    DECLARE bus_name VARCHAR(50);
+    DECLARE cur CURSOR FOR SELECT `BUS_NAME` FROM `Bus` WHERE `BUS_TYPE` = 'AC';
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+    
+    OPEN cur;
+    read_loop: LOOP
+        FETCH cur INTO bus_name;
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+        SELECT bus_name;
+    END LOOP;
+    CLOSE cur;
+END$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE PROCEDURE add_bus(
+    IN p_bus_name VARCHAR(50), 
+    IN p_bus_id INT, 
+    IN p_bus_reg_number VARCHAR(20), 
+    IN p_bus_ticket VARCHAR(50), 
+    IN p_bus_type VARCHAR(50)
+)
+BEGIN
+    INSERT INTO `Bus` (`BUS_NAME`, `BUS_ID`, `BUS_REG_NUMBER`, `BUS_TICKET`, `BUS_TYPE`)
+    VALUES (p_bus_name, p_bus_id, p_bus_reg_number, p_bus_ticket, p_bus_type);
+END$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE FUNCTION calculate_discounted_fare(fare_amount DECIMAL(10,2), discount_percentage INT)
+RETURNS DECIMAL(10,2)
+DETERMINISTIC
+BEGIN
+    RETURN fare_amount - (fare_amount * discount_percentage / 100);
+END$$
+DELIMITER ;
+
+DELIMITER $$
+CREATE PROCEDURE FetchBusTickets()
+BEGIN  
+    DECLARE done INT DEFAULT 0;  
+    DECLARE bus_name VARCHAR(50);  
+    DECLARE bus_ticket VARCHAR(50);  
+    DECLARE cur CURSOR FOR SELECT BUS_NAME, BUS_TICKET FROM `Bus`;  
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;  
+
+    OPEN cur;  
+    read_loop: LOOP  
+        FETCH cur INTO bus_name, bus_ticket;  
+        IF done THEN  
+            LEAVE read_loop;  
+        END IF;  
+        SELECT bus_name, bus_ticket;  
+    END LOOP;  
+    CLOSE cur;  
+END$$  
+DELIMITER ;
+
+
+
+-- Hypothetical: If Login table had USER_ID
+SELECT L.LOGIN_USERNAME, U.USER_NAME
+FROM Login L
+INNER JOIN User U
+ON L.LOGIN_ID = U.USER_ID;
+
+
+SELECT U.USER_NAME, L.LOGIN_USERNAME
+FROM User U
+LEFT JOIN Login L
+ON U.USER_ID = L.LOGIN_ID;
+
+
+
+SELECT U.USER_NAME, L.LOGIN_USERNAME
+FROM User U
+RIGHT JOIN Login L
+ON U.USER_ID = L.LOGIN_ID;
+
+
+
+SELECT U.USER_NAME, L.LOGIN_USERNAME
+FROM User U
+LEFT JOIN Login L ON U.USER_ID = L.LOGIN_ID
+UNION
+SELECT U.USER_NAME, L.LOGIN_USERNAME
+FROM User U
+RIGHT JOIN Login L ON U.USER_ID = L.LOGIN_ID;
+
+
+
+SELECT S.STN_NAME, B.BUS_NAME
+FROM Station S
+CROSS JOIN Bus B;
+
+
+
+SELECT A.USER_NAME AS User1, B.USER_NAME AS User2
+FROM User A
+JOIN User B ON A.USER_MOBILE = B.USER_MOBILE
+WHERE A.USER_ID <> B.USER_ID;
+
+
+SELECT *
+FROM Login
+NATURAL JOIN User;
+
+
+CREATE PROCEDURE AddUser(
+    IN p_user_id INT,
+    IN p_user_name VARCHAR(50),
+    IN p_user_mobile VARCHAR(20),
+    IN p_user_email VARCHAR(50),
+    IN p_user_address VARCHAR(100)
+)
+BEGIN
+    INSERT INTO User (USER_ID, USER_NAME, USER_MOBILE, USER_EMAIL, USER_ADDRESS)
+    VALUES (p_user_id, p_user_name, p_user_mobile, p_user_email, p_user_address);
+END //
+
+DELIMITER ;
+
+
+DELIMITER //
+
+CREATE PROCEDURE GetAllBuses()
+BEGIN
+    SELECT * FROM Bus;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+CREATE FUNCTION GetBusTicketType(busId INT)
+RETURNS VARCHAR(50)
+DETERMINISTIC
+BEGIN
+    DECLARE ticketType VARCHAR(50);
+    
+    SELECT BUS_TICKET INTO ticketType
+    FROM Bus
+    WHERE BUS_ID = busId;
+    
+    RETURN ticketType;
+END //
+
+DELIMITER ;
+
+DELIMITER //
+
+CREATE FUNCTION GetStationName(stnId INT)
+RETURNS VARCHAR(50)
+DETERMINISTIC
+BEGIN
+    DECLARE name VARCHAR(50);
+
+    SELECT STN_NAME INTO name
+    FROM Station
+    WHERE STN_ID = stnId;
+
+    RETURN name;
+END //
+
+DELIMITER ;
+
+
+
+#### UNNORMALIZED TABLE ####
+
+CREATE TABLE StudentData (
+    StudentID INT,
+    StudentName VARCHAR(50),
+    Courses VARCHAR(255),  -- Comma-separated values (unstructured)
+    PhoneNumbers VARCHAR(255)  -- Comma-separated values (unstructured)
+);
+
+INSERT INTO StudentData VALUES 
+(1, 'Alice', 'Math, Science', '9876543210, 8765432109'),
+(2, 'Bob', 'Math', '7654321098'),
+(3, 'Charlie', 'History, Science, Math', '6543210987, 5432109876');
+
+
+#### CONVERTING TO 1NF ####
+
+CREATE TABLE StudentData_1NF (
+    StudentID INT,
+    StudentName VARCHAR(100),
+    Course VARCHAR(100),
+    PhoneNumber VARCHAR(15)
+);
+
+-- Inserting values as separate rows for each course and phone number
+INSERT INTO StudentData_1NF (StudentID, StudentName, Course, PhoneNumber) VALUES
+(1, 'Alice', 'Math', '9876543210'),
+(1, 'Alice', 'Science', '9876543210'),
+(1, 'Alice', 'Math', '8765432109'),
+(1, 'Alice', 'Science', '8765432109'),
+(2, 'Bob', 'Math', '7654321098'),
+(3, 'Charlie', 'History', '6543210987'),
+(3, 'Charlie', 'Science', '6543210987'),
+(3, 'Charlie', 'Math', '6543210987'),
+(3, 'Charlie', 'History', '5432109876'),
+(3, 'Charlie', 'Science', '5432109876'),
+(3, 'Charlie', 'Math', '5432109876');
+
+
+
+#### 2nd NORMAL FORM ####
+#### TO REMOVE PARTIAL DEPENDENCY ####
+
+CREATE TABLE Student (
+    StudentID INT PRIMARY KEY,
+    StudentName VARCHAR(100)
+);
+
+INSERT INTO Student (StudentID, StudentName) VALUES
+(1, 'Alice'),
+(2, 'Bob'),
+(3, 'Charlie');
+
+CREATE TABLE Courses (
+    CourseID INT PRIMARY KEY AUTO_INCREMENT,
+    Course VARCHAR(100)
+);
+
+INSERT INTO Courses (Course) VALUES
+('Math'),
+('Science'),
+('History');
+
+CREATE TABLE Enrollment (
+    StudentID INT,
+    CourseID INT,
+    PRIMARY KEY (StudentID, CourseID),
+    FOREIGN KEY (StudentID) REFERENCES Student(StudentID),
+    FOREIGN KEY (CourseID) REFERENCES Courses(CourseID)
+);
+
+INSERT INTO Enrollment (StudentID, CourseID) VALUES
+(1, 1),  
+(1, 2),  
+(2, 1),  
+(3, 3),  
+(3, 2),  
+(3, 1);  
+
+CREATE TABLE PhoneNumbers (
+    PhoneNumber VARCHAR(15),
+    StudentID INT,
+    PRIMARY KEY (PhoneNumber),
+    FOREIGN KEY (StudentID) REFERENCES Student(StudentID)
+);
+
+INSERT INTO PhoneNumbers (PhoneNumber, StudentID) VALUES
+('9876543210', 1),
+('8765432109', 1),
+('7654321098', 2),
+('6543210987', 3),
+('5432109876', 3);
+
