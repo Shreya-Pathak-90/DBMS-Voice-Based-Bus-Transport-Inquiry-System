@@ -137,10 +137,37 @@ not exists
 alter table RouteDetails add constraint check(AproxDistance>0);
 insert into DriverDetails values('126', 'Prithvi', '9834534565','29','2017-09-22');
 insert into BusStops values('4','Chennai','7');
+insert into BusStops values('4','Bangalore','9');
+insert into BusStops values('5','Potheri','2');
+insert into BusStops values('5','Perungudi','5');
+insert into BusStops values('2','Chennai','8');
+insert into BusStops values('2','Vellore','1');
+insert into BusStops values('3','Potheri','3');
+insert into BusStops values('3','Pondicherry','11');
+insert into BusStops values('5','Lucknow','14');
+insert into BusStops values('5','Gaya','15');
+insert into BusStops values('6','Lucknow','89');
+insert into BusStops values('6','Varansi','91');
+insert into BusStops values('9','Lucknow','90');
+insert into BusStops values('9','Ballia','23');
+
 
 delete from TimeForTravel;
 insert into RouteDetails values('4','BGL-CNI','Bangalore','Chennai','345');
-insert into RouteDetails values('3','CNI-BGL','Chennai','Bangalore','345');
+insert into RouteDetails values('4','CNI-BGL','Chennai','Bangalore','345');
+insert into RouteDetails values('5','POT-PER','Potheri','Perungudi','345');
+insert into RouteDetails values('5','PER-POT','Perungudi','Potheri','345');
+insert into RouteDetails values('2','CNI-VEL','Chennai','Vellore','345');
+insert into RouteDetails values('2','VEL-CNI','Vellore','Bangalore','345');
+insert into RouteDetails values('3','POT-POND','Potheri','Pondicherry','345');
+insert into RouteDetails values('3','POND-POT','Pondicherry','Potheri','345');
+insert into RouteDetails values('5','LKO-GAYA','Lucknow','Gaya','345');
+insert into RouteDetails values('5','GAYA-LKO','Gaya','Lucknow','345');
+insert into RouteDetails values('6','LKO-VAI','Lucknow','Varansi','345');
+insert into RouteDetails values('6','VAI-LKO','Varansi','Lucknow','345');
+insert into RouteDetails values('9','LKO-BAL','Lucknow','Ballia','345');
+insert into RouteDetails values('9','BAL-LKO','Ballia','Lucknow','345');
+
 
 insert into RouteDetails values('2','BGL-TRR','Bangalore','Tirupur','322');
 insert into TimeForTravel values('12','17.30','05.30');
